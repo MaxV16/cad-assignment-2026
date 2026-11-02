@@ -50,6 +50,7 @@ export class AppApiStack extends cdk.Stack {
 
     table.grantReadData(getMovieRolesFn);
     table.grantReadData(getActorFn);
+    table.grantWriteData(addMovieRoleFn);
 
     // Sample data, written once when the stack is created.
     const items = seedItems();
@@ -91,11 +92,36 @@ export class AppApiStack extends cdk.Stack {
       authorizer: userAuthorizer,
       authorizationType: apig.AuthorizationType.CUSTOM,
     };
-    // Routes
-    const moviesResource = api.root.addResource('movies');
 
-    const movieRolesResource = moviesResource.addResource('{movieID}').addResource('roles');
-    movieRolesResource.addMethod('GET', new apig.LambdaIntegration(getMovieRolesFn), userAuth);
+    // Routes
+       const moviesResource = api.root.addResource('movies');
+
+       const movieRolesResource = moviesResource.addResource('{movieID}').addResource('roles');
+       movieRolesResource.addMethod('GET', new apig.LambdaIntegration(getMovieRolesFn), userAuth);
+
+       // POST is for the admin, so it uses an API key instead of the Cognito authorizer.
+       moviesResource
+         .addResource('roles')
+         .addMethod('POST', new apig.LambdaIntegration(addMovieRoleFn), {
+           apiKeyRequired: true,
+         });
+
+       const adminApiKey = api.addApiKey('AdminApiKey');
+       const usagePlan = api.addUsagePlan('AdminUsagePlan', { name: 'AdminUsagePlan' });
+       usagePlan.addApiKey(adminApiKey);
+       // The key is only enforced once the plan is linked to the deployed stage.
+       usagePlan.addApiStage({ stage: api.deploymentStage });
+
+       new cdk.CfnOutput(this, 'AdminApiKeyId', {
+         value: adminApiKey.keyId,
+         description: 'Run aws apigateway get-api-key --api-key <id> --include-value to see the key.',
+       });
+
+       api.root
+         .addResource('actors')
+         .addResource('{actorID}')
+         .addMethod('GET', new apig.LambdaIntegration(getActorFn), userAuth);
+
 
     api.root
       .addResource('actors')
