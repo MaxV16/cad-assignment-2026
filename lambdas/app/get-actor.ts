@@ -68,6 +68,6 @@ export const handler = async (
     });
   } catch (err) {
     console.error("DynamoDB error:", err);
-    return response(500, { message: "Internal server error", error: err });
+    return response(500, { message: "Internal server error" });
   }
 };
