@@ -132,4 +132,63 @@ The application should log all user requests to CloudWatch logs. A log entry sho
      1. Consider other error cases.
      1. Refactor at each stage to improve code quality, e.g. DRY, variable naming, redundant debugging code, etc.
 
+## Notes
+
+### Deploy
+
+The app is two stacks: `CognitoStack` for the user pool and auth API, and `AppApiStack` for the table, lambdas and app API.
+
+```bash
+npm install
+npx cdk bootstrap
+npx cdk deploy --all
+```
+
+`CognitoStack` outputs the auth API URL. The app API URL is in the API Gateway console under `AppApi` -> Stages -> `dev`. `AppApiStack` outputs the admin key id, and the key value can be read with:
+
+```bash
+aws apigateway get-api-key --api-key <AdminApiKeyId> --include-value --query value --output text
+```
+
+### Auth
+
+Users sign up, confirm their email, then sign in. Sign in sets the ID token as a `token` cookie, which the app API checks.
+
+```bash
+curl -X POST "$AUTH_API/auth/signup" -H "Content-Type: application/json" -d '{"username":"doconnor","password":"Password1!","email":"doconnor@example.com"}'
+
+curl -X POST "$AUTH_API/auth/confirm_signup" -H "Content-Type: application/json" -d '{"username":"doconnor","code":"123456"}'
+
+curl -X POST "$AUTH_API/auth/signin" -H "Content-Type: application/json" -d '{"username":"doconnor","password":"Password1!"}' -c cookies.txt
+
+curl -X POST "$AUTH_API/auth/signout"
+```
+
+### Endpoints
+
+```bash
+curl "$APP_API/movies/1234/roles" -b cookies.txt
+curl "$APP_API/movies/1234/roles?actor=4321" -b cookies.txt
+curl "$APP_API/actors/4321" -b cookies.txt
+curl "$APP_API/actors/4321?movie=1234" -b cookies.txt
+```
+
+POST is admin only and uses the API key instead of the cookie:
+
+```bash
+curl -X POST "$APP_API/movies/roles" -H "Content-Type: application/json" -H "x-api-key: $ADMIN_API_KEY" -d '{"movieId":1235,"actorId":4321,"roleName":"Lucius Fox","roleDescription":"Runs Wayne Enterprises and supplies Batman with his equipment."}'
+```
+
+Invalid input returns 400, a missing movie or actor returns 404, and a duplicate role returns 409. A missing token or API key returns 403, and unexpected errors return 500. Requests are logged to CloudWatch as `<username>   <path>`.
+
+### AI declaration
+
+I used AI assistance for a few parts of this assignment:
+
+- Explaining AWS CDK and TypeScript syntax when I got stuck.
+- Suggesting edge cases to test for the add movie role endpoint.
+- Checking the wording and structure of these implementation notes.
+
+I reviewed and tested anything suggested before including it, and the implementation and debugging were done by me.
+
 [moodle]: https://moodle.setu.ie/mod/assign/view.php?id=4868989
